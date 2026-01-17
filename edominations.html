@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Battle Damage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #0f172a;
+    color: #e5e7eb;
+    padding: 20px;
+  }
+
+  h1 {
+    text-align: center;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin: 20px auto;
+    max-width: 600px;
+  }
+
+  input {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    font-size: 16px;
+  }
+
+  button {
+    padding: 12px 18px;
+    background: #3b82f6;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: #2563eb;
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  .column {
+    background: #020617;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .column h2 {
+    margin: 0;
+    padding: 12px;
+    text-align: center;
+    font-size: 16px;
+  }
+
+  .attack-title {
+    background: #052e16;
+    color: #22c55e;
+  }
+
+  .defense-title {
+    background: #450a0a;
+    color: #ef4444;
+  }
+
+  .player {
+    padding: 12px;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  .name {
+    font-weight: 600;
+  }
+
+  .damage {
+    font-size: 14px;
+  }
+
+  .hits {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+
+  .bar {
+    height: 6px;
+    background: #1e293b;
+    border-radius: 4px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+
+  .attack-bar { background: #22c55e; }
+  .defense-bar { background: #ef4444; }
+
+  .pagination {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px;
+  }
+
+  .loading {
+    text-align: center;
+    color: #94a3b8;
+    margin-top: 20px;
+  }
+
+  @media (max-width: 800px) {
+    .columns {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<h1>⚔️ Battle Damage</h1>
+
+<div class="controls">
+  <input id="battleId" type="number" placeholder="Enter Battle ID (e.g. 89389)" />
+  <button id="load">Load</button>
+</div>
+
+<div id="status" class="loading"></div>
+
+<div id="columns" class="columns" style="display:none">
+  <div class="column">
+    <h2 class="attack-title">🟢 Attackers</h2>
+    <div id="attackers"></div>
+    <div class="pagination">
+      <button onclick="changePage('attack', -1)">⬅ Prev</button>
+      <button onclick="changePage('attack', 1)">Next ➡</button>
+    </div>
+  </div>
+
+  <div class="column">
+    <h2 class="defense-title">🔴 Defenders</h2>
+    <div id="defenders"></div>
+    <div class="pagination">
+      <button onclick="changePage('defense', -1)">⬅ Prev</button>
+      <button onclick="changePage('defense', 1)">Next ➡</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PAGE_SIZE = 10;
+
+let attackers = [];
+let defenders = [];
+let pageAttack = 0;
+let pageDefense = 0;
+
+document.getElementById("load").addEventListener("click", loadBattle);
+
+async function loadBattle() {
+  const id = document.getElementById("battleId").value.trim();
+  if (!id) return alert("Please enter a battle ID");
+
+  const status = document.getElementById("status");
+  const columns = document.getElementById("columns");
+
+  status.textContent = "Loading battle data...";
+  columns.style.display = "none";
+
+  pageAttack = 0;
+  pageDefense = 0;
+
+  try {
+    const apiUrl = `https://edominations.com/en/api/battle-damage/${id}`;
+    const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(apiUrl);
+
+    const res = await fetch(proxyUrl);
+    const rawData = await res.json();
+    const players = Object.values(rawData);
+
+    attackers = players
+      .filter(p => p.SIDE === "attack")
+      .sort((a, b) => b.DMG - a.DMG);
+
+    defenders = players
+      .filter(p => p.SIDE === "defense")
+      .sort((a, b) => b.DMG - a.DMG);
+
+    render();
+    status.textContent = "";
+    columns.style.display = "grid";
+
+  } catch (err) {
+    status.textContent = "❌ Failed to load data";
+    console.error(err);
+  }
+}
+
+function render() {
+  renderSide("attack");
+  renderSide("defense");
+}
+
+function renderSide(side) {
+  const list = side === "attack" ? attackers : defenders;
+  const page = side === "attack" ? pageAttack : pageDefense;
+  const container = document.getElementById(
+    side === "attack" ? "attackers" : "defenders"
+  );
+
+  container.innerHTML = "";
+
+  const maxDMG = list[0]?.DMG || 1;
+  const start = page * PAGE_SIZE;
+  const pageItems = list.slice(start, start + PAGE_SIZE);
+
+  pageItems.forEach(p => {
+    container.innerHTML += `
+      <div class="player">
+        <div class="name">${p.Name}</div>
+        <div class="damage">${p.DMG.toLocaleString()} damage</div>
+        <div class="hits">${p.Hits.toLocaleString()} hits</div>
+        <div class="bar">
+          <div class="${side}-bar" style="width:${(p.DMG / maxDMG) * 100}%"></div>
+        </div>
+      </div>
+    `;
+  });
+}
+
+function changePage(side, delta) {
+  if (side === "attack") {
+    pageAttack = Math.max(0, pageAttack + delta);
+    if (pageAttack * PAGE_SIZE >= attackers.length)
+      pageAttack--;
+  } else {
+    pageDefense = Math.max(0, pageDefense + delta);
+    if (pageDefense * PAGE_SIZE >= defenders.length)
+      pageDefense--;
+  }
+  renderSide(side);
+}
+</script>
+
+</body>
+</html>
